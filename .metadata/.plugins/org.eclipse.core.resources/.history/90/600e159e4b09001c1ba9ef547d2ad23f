@@ -1,0 +1,61 @@
+package com.bit.core.usecase.approval.kpi;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+
+import java.util.Arrays;
+import java.util.List;
+
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+
+import com.bit.core.constant.ErrorMessage;
+import com.bit.core.constant.RoleCode;
+import com.bit.core.entity.KpiPeriod;
+import com.bit.core.model.request.FindManyRequestModel;
+import com.bit.core.response.FindManyResponseModel;
+import com.bit.core.strategy.FindManyStrategy;
+import com.bit.core.strategy.findMany.FindManyTargetKpiApproval;
+import com.bit.core.usecase.BaseUsecaseTest;
+import com.bit.core.usecase.FindManyUsecase;
+import com.bit.core.utils.TokenUtils;
+import com.bit.core.validator.NullValidator;
+
+public class FindManyKpiApprovalTest extends BaseUsecaseTest {
+	private static String approverToken;
+	private static String notApproverToken;
+//	private static List<String> viewRoles;
+	private static String usernameApprover = "Zuser1";
+	private static String usernameNotApprover = "Zuser2";
+
+	
+	@BeforeAll
+	public static void beforeAll() {
+//		viewRoles = Arrays.asList(RoleCode.ROLE_SALESMAN_VIEW);
+		approverToken = TokenUtils.createJWT( usernameApprover, null,  60000);
+		notApproverToken = TokenUtils.createJWT(notApproverToken, null, 50000);
+//		createUser(username, "mail@mail.com", "password123");
+	}
+	@Test
+	public void givenNoPeriod_willGetValidationError() {
+		FindManyRequestModel requestModel = new FindManyRequestModel();
+		requestModel.token = approverToken;
+		FindManyStrategy<KpiPeriod, FindManyRequestModel> findManyStrategy = new FindManyTargetKpiApproval(requestModel);
+		FindManyUsecase<?,?,?> usecase = new FindManyUsecase<>(requestModel, new FindManyResponseModel<KpiPeriod>(), findManyStrategy, null);
+		usecase.run();
+		FindManyResponseModel<KpiPeriod> response = (FindManyResponseModel<KpiPeriod>)usecase.getResponseModel();
+		assertFalse(response.isSuccess);
+		assertEquals(NullValidator.VALIDATION_MESSAGE, response.validationMessages.get("period"));
+	}
+	@Test
+	public void givenNotApproverToken_willError() {
+		FindManyRequestModel requestModel = new FindManyRequestModel();
+		requestModel.token = notApproverToken;
+		FindManyStrategy<KpiPeriod, FindManyRequestModel> findManyStrategy = new FindManyTargetKpiApproval(requestModel);
+		FindManyUsecase<?,?,?> usecase = new FindManyUsecase<>(requestModel, new FindManyResponseModel<KpiPeriod>(), findManyStrategy, null);
+		usecase.run();
+		FindManyResponseModel<KpiPeriod> response = (FindManyResponseModel<KpiPeriod>)usecase.getResponseModel();
+		assertFalse(response.isSuccess);
+		assertEquals(ErrorMessage.UNAUTHORIZED, response.errorMessage);
+	}
+}

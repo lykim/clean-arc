@@ -1,0 +1,517 @@
+package com.bit.persistent.gateway;
+
+import java.sql.Array;
+import java.sql.Connection;
+import java.sql.Date;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.time.LocalDate;
+import java.time.YearMonth;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import com.bit.core.constant.Direction;
+import com.bit.core.constant.TargetKpiStatus;
+import com.bit.core.entity.KeyPerformanceIndicator;
+import com.bit.core.entity.KpiPeriod;
+import com.bit.core.entity.Salesman;
+import com.bit.core.entity.UnitKpi;
+import com.bit.core.gateway.KpiGateway;
+import com.bit.core.gateway.TargetKpiGateway;
+import com.bit.core.mocks.gateway.MockKpiGateway;
+import com.bit.core.model.request.FindManyRequestModel;
+import com.bit.core.model.request.SalesmanRequestModel;
+import com.bit.core.response.WebPage;
+import com.bit.core.response.base.Page;
+import com.bit.core.utils.CollectionUtils;
+import com.bit.core.utils.StringUtils;
+import com.bit.persistent.DataSource;
+
+public class KpiGatewayImpl implements KpiGateway {
+
+	private static KpiGatewayImpl INSTANCE;
+	private KpiGatewayImpl() {};
+	
+	public static KpiGateway getInstance() {
+		if(INSTANCE == null) {
+			INSTANCE = new KpiGatewayImpl();
+		}
+		return INSTANCE;
+	}
+	
+	public static TargetKpiGateway getInstanceTargetKpi() {
+		if(INSTANCE == null) {
+			INSTANCE = new KpiGatewayImpl();
+		}
+		return INSTANCE;
+	}
+	
+	@Override
+	public void clean() {
+		try(Connection connection = DataSource.getConnection()) {			
+			connection.setAutoCommit(false);
+			PreparedStatement stmtKpiPeriod = connection.prepareStatement("DELETE FROM \"kpi_period\"");
+			stmtKpiPeriod.execute();
+			PreparedStatement stmtTargetKpi = connection.prepareStatement("DELETE FROM \"target_kpi\"");
+			stmtTargetKpi.execute();
+			PreparedStatement stmt = connection.prepareStatement("DELETE FROM \"salesman\"");
+			stmt.execute();
+			connection.commit();
+		}catch (Exception e) {
+			e.printStackTrace();
+			throw new RuntimeException("Database error", e);
+		}
+		
+	}
+
+	@Override
+	public Set<Salesman> getSalesmanByCodes(Set<String> codes) {
+		try(Connection connection = DataSource.getConnection()) {
+			String selectSql = genereteFullQuery() + " WHERE code = ANY(?)"; 
+			PreparedStatement stmt= connection.prepareStatement(selectSql);
+			Array codesInArray = connection.createArrayOf("VARCHAR", codes.toArray());
+			stmt.setArray(1, codesInArray);
+			ResultSet rs = stmt.executeQuery();  
+			List<Salesman> salesmans = mapFullSalesmanFromResultSet(rs);
+			if(CollectionUtils.isEmpty(salesmans)) return new HashSet<>();
+			return new HashSet<>(salesmans);
+		} catch (Exception e) {
+			e.printStackTrace();
+			throw new RuntimeException("database error",e);
+		}
+	}
+
+	@Override
+	public Salesman getSalesmanByCode(String code) {
+		try(Connection connection = DataSource.getConnection()) {
+			String selectQuery = genereteFullQuery();
+			PreparedStatement stmt= connection.prepareStatement(selectQuery + " WHERE code=?");
+			stmt.setString(1, code);
+			ResultSet rs = stmt.executeQuery();  
+			List<Salesman> roles = mapFullSalesmanFromResultSet(rs);
+			if(CollectionUtils.isEmpty(roles)) return null;
+			return roles.get(0);
+		} catch (Exception e) {
+			e.printStackTrace();
+			throw new RuntimeException("database error",e);
+		}
+	}
+	
+	private List<Salesman> mapFullSalesmanFromResultSet(ResultSet rs) throws SQLException {
+		Map<String, Salesman> salesmanMap = new HashMap<>();
+		Map<String, Map<String,KpiPeriod>> salesmanKpiPeriodMap = new HashMap<>();
+		Map<String, Map<String, KeyPerformanceIndicator>> periodTargetMap = new HashMap<>();
+		String salesmanId = "";
+		while(rs.next()){
+			salesmanId = rs.getString("s_id");
+			if(StringUtils.isNotEmpty(salesmanId)) {
+				Salesman salesman = salesmanMap.getOrDefault(salesmanId, createSalesmanFromRs(rs));
+				String periodId = rs.getString("kp_id");
+				if(StringUtils.isNotEmpty(periodId)){
+					Map<String,KpiPeriod> kpiPeriodMap = salesmanKpiPeriodMap.getOrDefault(salesmanId, new HashMap<>());
+					KpiPeriod kpiPeriod = kpiPeriodMap.getOrDefault(periodId, createKpiPeriodFromRs(rs));
+					if(StringUtils.isNotEmpty(rs.getString("tk_id"))){
+						Map<String, KeyPerformanceIndicator> targetKpiMap = periodTargetMap.getOrDefault(periodId, new HashMap<>());  
+						KeyPerformanceIndicator targetKpi = targetKpiMap.getOrDefault(rs.getString("tk_id"), 
+								createTargetKpiFromRs(rs));
+						if(StringUtils.isNotEmpty(rs.getString("uk_id"))) {
+							UnitKpi unitKpi = createUnitKpiFromRs(rs);
+							targetKpi.setUnitKpi(unitKpi);
+						}
+						periodTargetMap.put(periodId, targetKpiMap);
+						targetKpiMap.put(rs.getString("tk_id"), targetKpi);
+					}
+					Map<String, KeyPerformanceIndicator> targets = periodTargetMap.getOrDefault(periodId, new HashMap<>());
+					kpiPeriod.setTargetKpis(new ArrayList<>(targets.values()));
+					kpiPeriodMap.put(rs.getString("kp_id"), kpiPeriod); 
+					salesmanKpiPeriodMap.put(salesmanId, kpiPeriodMap);
+				}	
+				Map<String,KpiPeriod> kpiPeriods = salesmanKpiPeriodMap.getOrDefault(salesmanId, new HashMap<>());
+				salesman.setKpiPeriods(new ArrayList<>( kpiPeriods.values() ));
+				salesmanMap.put(salesmanId, salesman);				
+			}
+		}
+		return new ArrayList<>(salesmanMap.values());
+	}
+	
+	private UnitKpi createUnitKpiFromRs(ResultSet rs)  throws SQLException {
+		UnitKpi unitKpi = new UnitKpi();
+		unitKpi.setId(rs.getString("uk_id"));
+		unitKpi.setName(rs.getString("uk_name"));
+		unitKpi.setDescription(rs.getString("uk_description"));
+		return unitKpi;
+	}
+	
+	private KeyPerformanceIndicator createTargetKpiFromRs(ResultSet rs)  throws SQLException {
+		KeyPerformanceIndicator targetKpi = new KeyPerformanceIndicator();
+		targetKpi.setId(rs.getString("tk_id"));
+		targetKpi.setBobot(rs.getDouble("bobot"));
+		targetKpi.setTarget(rs.getLong("target"));
+		targetKpi.setTargetPoint(rs.getInt("target_point"));
+
+		return targetKpi;
+	}
+	
+	private KpiPeriod createKpiPeriodFromRs(ResultSet rs)throws SQLException {
+		KpiPeriod kpiPeriod = new KpiPeriod();
+		kpiPeriod.setId(rs.getString("kp_id"));
+		if(StringUtils.isNotEmpty(rs.getString("kpi_status"))) {
+			try {
+				kpiPeriod.setKpiStatus(TargetKpiStatus.get(rs.getString("kpi_status")));
+
+			}catch (Exception e) { e.printStackTrace();}
+		}
+		Date sqlDate = rs.getDate("period");
+		if(sqlDate != null) {
+			LocalDate localDate = sqlDate.toLocalDate();
+			YearMonth yearMonth = YearMonth.from(localDate);
+			kpiPeriod.setPeriod(yearMonth);
+		}
+		return kpiPeriod;
+	}
+	
+	private Salesman createSalesmanFromRs(ResultSet rs)  throws SQLException {
+		Salesman salesman = new Salesman();
+		salesman.setId(rs.getString("s_id"));
+		salesman.setActive(rs.getBoolean("s_active"));
+		salesman.setCode(rs.getString("code"));
+		salesman.setName(rs.getString("s_name"));
+		salesman.setDivision(rs.getString("division"));
+		salesman.setDescription(rs.getString("s_description"));
+		salesman.setLevel(rs.getInt("level"));
+		salesman.setLevelName(rs.getString("level_name"));
+		salesman.setEmail(rs.getString("email"));
+		salesman.setSupervisorCode(rs.getString("supervisor_code"));
+		salesman.setArea(rs.getString("area"));
+		salesman.setBranchCode(rs.getString("branch_code"));
+		salesman.setBranchName(rs.getString("branch_name"));
+		return salesman;
+	}
+
+	@Override
+	public void createSalesman(Salesman entity) {
+		try(Connection connection = DataSource.getConnection()) {
+			PreparedStatement stmt = connection.prepareStatement("INSERT INTO salesman (id, active, code, name, division, description, "
+					+ " level, level_name, email, supervisor_code, area, branch_code, branch_name) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?,?,?,?,?)");
+			stmt.setString(1, entity.getId());
+			stmt.setBoolean(2,  entity.isActive());
+			stmt.setString(3,  entity.getCode());
+			stmt.setString(4,  entity.getName());
+			stmt.setString(5,  entity.getDivision());
+			stmt.setString(6,  entity.getDescription());
+			stmt.setInt(7,  entity.getLevel());
+			stmt.setString(8,  entity.getLevelName());
+			stmt.setString(9,  entity.getEmail());
+			stmt.setString(10,  entity.getSupervisorCode());
+			stmt.setString(11,  entity.getArea());
+			stmt.setString(12,  entity.getBranchCode());
+			stmt.setString(13,  entity.getBranchName());
+			stmt.execute();
+		}catch (Exception e) {
+			e.printStackTrace();
+			throw new RuntimeException("Database error", e);
+		}
+	}
+
+	@Override
+	public void updateSalesman(Salesman entity) {
+		try(Connection connection = DataSource.getConnection()) {
+			String fieldsToUpdate = "";
+			if(StringUtils.isNotEmpty(entity.getArea())) {
+				fieldsToUpdate += "area=?";
+			}
+			if(StringUtils.isNotEmpty(entity.getBranchCode())) {
+				fieldsToUpdate += StringUtils.isNotEmpty(fieldsToUpdate) ? "," : "";
+				fieldsToUpdate += "branch_code=?";
+			}
+			if(StringUtils.isNotEmpty(entity.getBranchName())) {
+				fieldsToUpdate += StringUtils.isNotEmpty(fieldsToUpdate) ? "," : "";
+				fieldsToUpdate += "branch_name=?";
+			}
+			if(StringUtils.isNotEmpty(entity.getDescription())) {
+				fieldsToUpdate += StringUtils.isNotEmpty(fieldsToUpdate) ? "," : "";
+				fieldsToUpdate += "description=?";
+			}
+			if(StringUtils.isNotEmpty(entity.getDivision())) {
+				fieldsToUpdate += StringUtils.isNotEmpty(fieldsToUpdate) ? "," : "";
+				fieldsToUpdate += "division=?";
+			}
+			if(StringUtils.isNotEmpty(entity.getEmail())) {
+				fieldsToUpdate += StringUtils.isNotEmpty(fieldsToUpdate) ? "," : "";
+				fieldsToUpdate += "email=?";
+			}
+			if(StringUtils.isNotEmpty(entity.getLevelName())) {
+				fieldsToUpdate += StringUtils.isNotEmpty(fieldsToUpdate) ? "," : "";
+				fieldsToUpdate += "level_name=?";
+			}
+			if(StringUtils.isNotEmpty(entity.getName())) {
+				fieldsToUpdate += StringUtils.isNotEmpty(fieldsToUpdate) ? "," : "";
+				fieldsToUpdate += "name=?";
+			}
+			if(StringUtils.isNotEmpty(entity.getSupervisorCode())) {
+				fieldsToUpdate += StringUtils.isNotEmpty(fieldsToUpdate) ? "," : "";
+				fieldsToUpdate += "supervisor_code=?";
+			}
+			if(entity.getLevel() != 0) {
+				fieldsToUpdate += StringUtils.isNotEmpty(fieldsToUpdate) ? "," : "";
+				fieldsToUpdate += "level=?";
+			}
+			
+			PreparedStatement stmt = connection.prepareStatement("UPDATE salesman SET "+ fieldsToUpdate +" WHERE id = ?");
+			int position= 0;
+			
+			if(StringUtils.isNotEmpty(entity.getArea())) {
+				stmt.setString(++position, entity.getArea());
+			}
+			if(StringUtils.isNotEmpty(entity.getBranchCode())) {
+				stmt.setString(++position, entity.getBranchCode());
+			}
+			if(StringUtils.isNotEmpty(entity.getBranchName())) {
+				stmt.setString(++position, entity.getBranchName());
+			}
+			if(StringUtils.isNotEmpty(entity.getDescription())) {
+				stmt.setString(++position, entity.getDescription());
+			}
+			if(StringUtils.isNotEmpty(entity.getDivision())) {
+				stmt.setString(++position, entity.getDivision());
+			}
+			if(StringUtils.isNotEmpty(entity.getEmail())) {
+				stmt.setString(++position, entity.getEmail());
+			}
+			if(StringUtils.isNotEmpty(entity.getLevelName())) {
+				stmt.setString(++position, entity.getLevelName());
+			}
+			if(StringUtils.isNotEmpty(entity.getName())) {
+				stmt.setString(++position, entity.getName());
+			}
+			if(StringUtils.isNotEmpty(entity.getSupervisorCode())) {
+				stmt.setString(++position, entity.getSupervisorCode());
+			}
+			if(entity.getLevel() != 0) {
+				stmt.setInt(++position, entity.getLevel());
+			}
+			stmt.setString(++position, entity.getId());
+			stmt.execute();			
+		}catch (Exception e) {
+			e.printStackTrace();
+		}
+		
+	}
+
+	private String genereteFullQuery() {
+		return "SELECT s.id as s_id, s.active as s_active, s.name as s_name, "
+				+ " s.description as s_description, s.*,"
+				+ " kp.id as kp_id, kp.*, "
+				+ " tk.id as tk_id, tk.*, uk.id as uk_id, uk.name as uk_name, uk.description as uk_description FROM salesman s "
+				+ " LEFT JOIN kpi_period kp ON kp.salesman_id = s.id "
+				+ " LEFT JOIN target_kpi tk ON tk.kpi_period_id = kp.id"
+				+ " LEFT JOIN unit_kpi uk ON uk.id = tk.unit_kpi_id ";
+	}
+	
+	private String getWhereQuery(SalesmanRequestModel param) {
+		String whereQuery = " WHERE supervisor_code = ? ";
+		if(StringUtils.isNotEmpty(param.filterEqual.get("period"))) {
+			whereQuery += " AND kp.period=?";
+		}
+		return whereQuery;
+	}
+	
+	@Override
+	public Page<Salesman> getSubordinateSalesmansBySalesmanCode(SalesmanRequestModel param) {
+		try(Connection connection = DataSource.getConnection()) {
+			String selectQuery = genereteFullQuery();
+			String whereQuery = getWhereQuery(param);
+			String orderQuery = getOrderQuery(param);
+			String limitQuery = getLimitQuery(param);
+
+			PreparedStatement stmt= connection.prepareStatement(selectQuery + whereQuery + orderQuery + limitQuery);
+			stmt.setString(1, param.salesmanCode);
+			LocalDate period = null;
+			if(StringUtils.isNotEmpty(param.filterEqual.get("period"))) {
+				 String stringPeriod = param.filterEqual.get("period");
+				 YearMonth yearMonthPeriod = YearMonth.parse(stringPeriod);
+				 period = yearMonthPeriod.atDay(1);
+				stmt.setDate(2, period == null ? null : Date.valueOf(period));
+			}
+
+			ResultSet rs = stmt.executeQuery();  
+			List<Salesman> roles = mapFullSalesmanFromResultSet(rs);
+			
+			String countQuery = "SELECT COUNT(*) as total From salesman s LEFT JOIN kpi_period kp ON s.id = kp.salesman_id ";
+			PreparedStatement countStmt= connection.prepareStatement(countQuery + whereQuery);
+			countStmt.setString(1, param.salesmanCode);
+			if(StringUtils.isNotEmpty(param.filterEqual.get("period"))) {
+				countStmt.setDate(2, period == null ? null : Date.valueOf(period));			
+			}
+
+			ResultSet countRs = countStmt.executeQuery(); 
+			int total = 0;
+			while(countRs.next()){
+				total = countRs.getInt("total");
+			}
+			
+			return new WebPage<>(roles, total, param.pageSize);
+		} catch (Exception e) {
+			e.printStackTrace();
+			throw new RuntimeException("database error",e);
+		}
+	}
+	
+	private String getOrderQuery(FindManyRequestModel param) {
+		String orderSql = " ORDER BY ";
+		String orderBy = getFormatedOrderBy(param.orderBy);
+		String sortBy = param.direction == Direction.DESCENDING ? param.direction.getAbbreviation() : Direction.ASCENDING.getAbbreviation();
+		return orderSql + orderBy + " " + sortBy;
+	}
+	
+	private String getFormatedOrderBy(String orderBy) {
+		String result = "";
+		if(StringUtils.isNotEmpty(orderBy)) {
+			if(orderBy.equals("name")) return "s.name";
+		}else {
+			return "s.name";
+		}
+		return orderBy;
+	}
+	
+	private String getLimitQuery(FindManyRequestModel param) {
+		if(param.pageSize > 0) {
+			int offset = ((param.pageNumber * param.pageSize) - param.pageSize);
+			return " offset "+offset+" limit "+param.pageSize +" ";
+		}
+		return "";
+	}
+	
+	private ResultSet executeSelectKpiPeriodBySalesmanIdAndPeriod(Connection connection, Salesman salesman, KpiPeriod inputKpiPeriod) throws SQLException {
+		PreparedStatement stmtGetKpiPeriod = connection.prepareStatement("SELECT id, kpi_status FROM kpi_period where salesman_id = ? AND \"period\" >= ?");
+		stmtGetKpiPeriod.setString(1, salesman.getId());
+		LocalDate inputLocalDate = inputKpiPeriod.getPeriod().atDay(1);
+		stmtGetKpiPeriod.setDate(2, Date.valueOf(inputLocalDate));
+		return stmtGetKpiPeriod.executeQuery();  
+	}
+
+	@Override
+	public void updateSalesmanTargetKpi(Salesman salesman) {
+		try(Connection connection = DataSource.getConnection()) {
+			connection.setAutoCommit(false);
+			KpiPeriod inputKpiPeriod = salesman.getKpiPeriods().get(0);
+			ResultSet rs = executeSelectKpiPeriodBySalesmanIdAndPeriod(connection, salesman, inputKpiPeriod);  
+			String kpiPeriodId = "";
+			TargetKpiStatus kpiStatus = null;
+			while(rs.next()){
+				if(StringUtils.isNotEmpty(rs.getString("id"))) {
+					kpiPeriodId = rs.getString("id");				
+				}
+				String status = rs.getString("kpi_status");
+				if(StringUtils.isNotEmpty(status)) {
+					kpiStatus = TargetKpiStatus.get(status);					
+				}
+			}
+			if(StringUtils.isNotEmpty(kpiPeriodId)) {
+				if(TargetKpiStatus.DRAFT == kpiStatus) {
+					PreparedStatement stmtDelete = connection.prepareStatement("DELETE FROM target_kpi where kpi_period_id=?");
+					stmtDelete.setString(1,  kpiPeriodId);
+					stmtDelete.execute();
+					
+					PreparedStatement stmtInsert = connection.prepareStatement("INSERT INTO target_kpi (id, bobot, target, "
+							+ "target_point,unit_kpi_id, kpi_period_id) VALUES(?,?,?,?,?,?)");
+					for(KeyPerformanceIndicator kpi : inputKpiPeriod.getTargetKpis()) {
+						stmtInsert.setString(1, kpi.getId());
+						stmtInsert.setDouble(2, kpi.getBobot());
+						stmtInsert.setLong(3, kpi.getTarget());
+						stmtInsert.setInt(4, kpi.getTargetPoint());
+						stmtInsert.setString(5, kpi.getUnitKpi() != null ? kpi.getUnitKpi().getId() : "");
+						stmtInsert.setString(6, kpiPeriodId);					
+						stmtInsert.addBatch();
+					};
+					stmtInsert.executeBatch();
+				}else {
+					throw new RuntimeException("Cannot change if status is not draft");
+				}
+			}else {
+				String kpiPeriodInsertQuery = "INSERT INTO kpi_period (id, period, kpi_status, salesman_id) VALUES (?,?,?,?)";
+				PreparedStatement stmtInsertPeriod = connection.prepareStatement(kpiPeriodInsertQuery);
+				stmtInsertPeriod.setString(1, inputKpiPeriod.getId());
+				stmtInsertPeriod.setDate(2, Date.valueOf( inputKpiPeriod.getPeriod().atDay(1) ));
+				stmtInsertPeriod.setString(3, inputKpiPeriod.getKpiStatus().getAbbreviation());
+				stmtInsertPeriod.setString(4, salesman.getId());
+				stmtInsertPeriod.execute();
+				
+				PreparedStatement stmtInsert = connection.prepareStatement("INSERT INTO target_kpi (id, bobot, target, "
+						+ "target_point,unit_kpi_id, kpi_period_id) VALUES(?,?,?,?,?,?)");
+				for(KeyPerformanceIndicator kpi : inputKpiPeriod.getTargetKpis()) {
+					stmtInsert.setString(1, kpi.getId());
+					stmtInsert.setDouble(2, kpi.getBobot());
+					stmtInsert.setLong(3, kpi.getTarget());
+					stmtInsert.setInt(4, kpi.getTargetPoint());
+					stmtInsert.setString(5, kpi.getUnitKpi() != null ? kpi.getUnitKpi().getId() : "");
+					stmtInsert.setString(6, inputKpiPeriod.getId());					
+					stmtInsert.addBatch();
+				};
+				stmtInsert.executeBatch();
+			}
+			connection.commit();
+		}catch (Exception e) {
+			e.printStackTrace();
+			throw new RuntimeException(e.getMessage());
+		}
+	}
+
+	@Override
+	public void updateTargetKpiStatus(Salesman salesman) {
+		try(Connection connection = DataSource.getConnection()) {
+			PreparedStatement stmt = connection.prepareStatement("UPDATE kpi_period SET kpi_status=? WHERE salesman_id = ? AND period=?");
+			KpiPeriod kpiPeriod = salesman.getKpiPeriods().get(0);
+			stmt.setString(1, kpiPeriod.getKpiStatus().getAbbreviation());
+			stmt.setString(2, salesman.getId());
+			LocalDate localDate = kpiPeriod.getPeriod().atDay(1);
+			stmt.setDate(3, Date.valueOf(localDate));
+			stmt.execute();			
+		}catch (Exception e) {
+			e.printStackTrace();
+			throw new RuntimeException("database error",e);
+		}
+	}
+
+	@Override
+	public Salesman getSalesmanById(String id) {
+		try(Connection connection = DataSource.getConnection()) {
+			String selectQuery = genereteFullQuery();
+			PreparedStatement stmt= connection.prepareStatement(selectQuery + " WHERE s.id=?");
+			stmt.setString(1, id);
+			ResultSet rs = stmt.executeQuery();  
+			List<Salesman> roles = mapFullSalesmanFromResultSet(rs);
+			if(CollectionUtils.isEmpty(roles)) return null;
+			return roles.get(0);
+		} catch (Exception e) {
+			e.printStackTrace();
+			throw new RuntimeException("database error",e);
+		}	}
+
+	@Override
+	public void submitTargets(Set<String> ids, YearMonth period) {
+		try(Connection connection = DataSource.getConnection()) {
+			PreparedStatement stmt= connection.prepareStatement("UPDATE kpi_period set kpi_status=? WHERE salesman_id = ? AND period = ? AND kpi_status=?");
+			LocalDate localDate = period.atDay(1);
+			java.sql.Date sqlDate = java.sql.Date.valueOf(localDate);
+			for(String id: ids) {
+				stmt.setString(1, TargetKpiStatus.SUBMITTED.getAbbreviation());
+				stmt.setString(2, id);
+				stmt.setDate(3, sqlDate);
+				stmt.setString(4, TargetKpiStatus.DRAFT.getAbbreviation());
+				stmt.addBatch();
+			}
+			stmt.executeBatch();
+		} catch (Exception e) {
+			e.printStackTrace();
+			throw new RuntimeException("database error",e);
+		}
+		
+	}
+
+}

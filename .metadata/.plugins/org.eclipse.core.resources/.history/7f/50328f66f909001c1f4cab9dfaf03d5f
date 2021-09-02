@@ -1,0 +1,240 @@
+package com.bit.core.usecase.approval.kpi;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.time.YearMonth;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+
+import com.bit.core.constant.ApproverModule;
+import com.bit.core.constant.ApproverableType;
+import com.bit.core.constant.ErrorMessage;
+import com.bit.core.constant.RoleCode;
+import com.bit.core.entity.Approver;
+import com.bit.core.entity.EmailNotificator;
+import com.bit.core.entity.KpiPeriod;
+import com.bit.core.entity.Salesman;
+import com.bit.core.entity.User;
+import com.bit.core.entity.base.Notificator;
+import com.bit.core.model.request.FindManyRequestModel;
+import com.bit.core.model.request.SalesmanKpiRequestModel;
+import com.bit.core.model.request.SalesmanRequestModel;
+import com.bit.core.model.request.SalesmanTargetKpiRequestModel;
+import com.bit.core.model.request.UnitKpiRequestModel;
+import com.bit.core.response.CreateResponseModel;
+import com.bit.core.response.FindManyResponseModel;
+import com.bit.core.response.base.Page;
+import com.bit.core.strategy.FindManyStrategy;
+import com.bit.core.strategy.findMany.FindManyTargetKpiApproval;
+import com.bit.core.strategy.findMany.FindSubordinateSalesman;
+import com.bit.core.usecase.BaseUsecaseTest;
+import com.bit.core.usecase.FindManyUsecase;
+import com.bit.core.usecase.base.Usecase;
+import com.bit.core.usecase.kpi.CreateDraftTargetKpiSalesmanUsecase;
+import com.bit.core.usecase.kpi.CreateUnitKpiUsecase;
+import com.bit.core.usecase.kpi.SubmitTargetKpiStatusUsecase;
+import com.bit.core.utility.UserUsecaseUtils;
+import com.bit.core.utils.RequestModelHelper;
+import com.bit.core.utils.TokenUtils;
+import com.bit.core.validator.NullValidator;
+
+public class FindManyKpiApprovalTest extends BaseUsecaseTest {
+	private static String approverToken;
+	private static String notApproverToken;
+	private static String unitKpiToken;
+//	private static List<String> viewRoles;
+	private static String usernameApprover = "Zuser1";
+	private static String usernameNotApprover = "Zuser2";
+	private static String idUnitKpi1 = "";
+	private static String idUnitKpi2 = "";
+	private static String idUnitKpi3 = "";
+	private static Salesman salesmanIndex0;
+	private static Salesman salesmanIndex1;
+	private static Salesman salesmanIndex2;
+
+	
+	@BeforeAll
+	public static void beforeAll() {
+//		viewRoles = Arrays.asList(RoleCode.ROLE_SALESMAN_VIEW);
+		approverToken = TokenUtils.createJWT( usernameApprover, null,  60000);
+		notApproverToken = TokenUtils.createJWT(usernameNotApprover, null, 50000);
+		UserUsecaseUtils.createUser(usernameApprover, "mail@mail.com", "password123");
+		UserUsecaseUtils.createUser(usernameNotApprover, "mail1@mail.com", "password123","RUK-ATN");
+		List<String> unitKpis = Arrays.asList(RoleCode.ROLE_UNIT_KPI_CUD);
+		unitKpiToken = TokenUtils.createJWT( usernameNotApprover, unitKpis,  60000);
+		createSalesmanFromApi();
+		createUnitKpis();
+		createApprover();
+		createSubmiteddata();
+	}
+	private static void createSubmiteddata() {
+		YearMonth period = YearMonth.of(2017,6);
+		createTargetKpiWithValueFields(salesmanIndex0, period);
+		SalesmanKpiRequestModel requestModel = new SalesmanKpiRequestModel();
+		requestModel.id = salesmanIndex0.getId();
+		requestModel.period = period;
+		Usecase<?,?> usecase = new SubmitTargetKpiStatusUsecase(requestModel);
+		usecase.run();
+		
+		createTargetKpiWithValueFields(salesmanIndex1, period);
+		SalesmanKpiRequestModel requestModel1 = new SalesmanKpiRequestModel();
+		requestModel1.id = salesmanIndex1.getId();
+		requestModel1.period = period;
+		Usecase<?,?> usecase1 = new SubmitTargetKpiStatusUsecase(requestModel1);
+		usecase1.run();
+	}
+	@Test
+	public void givenNoPeriod_willGetValidationError() {
+		FindManyRequestModel requestModel = new FindManyRequestModel();
+		requestModel.token = approverToken;
+		FindManyStrategy<KpiPeriod, FindManyRequestModel> findManyStrategy = new FindManyTargetKpiApproval(requestModel);
+		FindManyUsecase<?,?,?> usecase = new FindManyUsecase<>(requestModel, new FindManyResponseModel<KpiPeriod>(), findManyStrategy, null);
+		usecase.run();
+		FindManyResponseModel<KpiPeriod> response = (FindManyResponseModel<KpiPeriod>)usecase.getResponseModel();
+		assertFalse(response.isSuccess);
+		assertEquals(NullValidator.VALIDATION_MESSAGE, response.validationMessages.get("period"));
+	}
+
+	@Test
+	public void givenNotApproverToken_willError() {
+		FindManyRequestModel requestModel = new FindManyRequestModel();
+		requestModel.token = notApproverToken;
+		Map<String, String> filterEqual = new HashMap<>();
+		YearMonth yearMonth = YearMonth.of(2021, 06);
+		filterEqual.put("period", yearMonth.toString());
+		requestModel.filterEqual = filterEqual;
+		FindManyStrategy<KpiPeriod, FindManyRequestModel> findManyStrategy = new FindManyTargetKpiApproval(requestModel);
+		FindManyUsecase<?,?,?> usecase = new FindManyUsecase<>(requestModel, new FindManyResponseModel<KpiPeriod>(), findManyStrategy, null);
+		usecase.run();
+		FindManyResponseModel<KpiPeriod> response = (FindManyResponseModel<KpiPeriod>)usecase.getResponseModel();
+		assertFalse(response.isSuccess);
+		assertEquals(ErrorMessage.UNAUTHORIZED, response.errorMessage);
+	}
+	
+	@Test
+	public void givenRequiredFields_willGetSubmittedData() {
+		FindManyRequestModel requestModel = new FindManyRequestModel();
+		requestModel.token = approverToken;
+		Map<String, String> filterEqual = new HashMap<>();
+		YearMonth yearMonth = YearMonth.of(2017,6);
+		filterEqual.put("period", yearMonth.toString());
+		requestModel.filterEqual = filterEqual;
+		FindManyStrategy<KpiPeriod, FindManyRequestModel> findManyStrategy = new FindManyTargetKpiApproval(requestModel);
+		FindManyUsecase<?,?,?> usecase = new FindManyUsecase<>(requestModel, new FindManyResponseModel<KpiPeriod>(), findManyStrategy, null);
+		usecase.run();
+		FindManyResponseModel<KpiPeriod> response = (FindManyResponseModel<KpiPeriod>)usecase.getResponseModel();
+		assertTrue(response.isSuccess);
+		Page<KpiPeriod> kpiPeriodPage = response.page;
+		assertEquals(2, kpiPeriodPage.getResult().size());
+	}
+	
+	@Test
+	public void givenPageSize_thenResultSizeSameAsPageSize() {
+		FindManyRequestModel requestModel = new FindManyRequestModel();
+		requestModel.token = approverToken;
+		requestModel.pageSize = 1;
+		Map<String, String> filterEqual = new HashMap<>();
+		YearMonth yearMonth = YearMonth.of(2017,6);
+		filterEqual.put("period", yearMonth.toString());
+		requestModel.filterEqual = filterEqual;
+		FindManyStrategy<KpiPeriod, FindManyRequestModel> findManyStrategy = new FindManyTargetKpiApproval(requestModel);
+		FindManyUsecase<?,?,?> usecase = new FindManyUsecase<>(requestModel, new FindManyResponseModel<KpiPeriod>(), findManyStrategy, null);
+		usecase.run();
+		FindManyResponseModel<KpiPeriod> response = (FindManyResponseModel<KpiPeriod>)usecase.getResponseModel();
+		assertTrue(response.isSuccess);
+		Page<KpiPeriod> kpiPeriodPage = response.page;
+		assertEquals(1, kpiPeriodPage.getResult().size());
+	}
+	
+	private static void createUnitKpis() {
+		idUnitKpi1 = generateUnitKpi("Target 1");
+		idUnitKpi2 = generateUnitKpi("Target 2");
+		idUnitKpi3 = generateUnitKpi("Target 3");
+	}
+	
+	private static String generateUnitKpi(String name) {
+		UnitKpiRequestModel requestModel = new UnitKpiRequestModel();
+		requestModel.token = unitKpiToken;
+		requestModel.name = name;
+		Usecase<?, CreateResponseModel> usecase = new CreateUnitKpiUsecase(requestModel);
+		usecase.run();
+		CreateResponseModel response = usecase.getResponseModel();
+		return response.id;
+	}
+	
+	private static void createTargetKpiWithValueFields(Salesman salesman, YearMonth period) {
+		List<SalesmanTargetKpiRequestModel> targetKpis = new ArrayList<>();
+		SalesmanTargetKpiRequestModel target1 = createSalesmanTargetKpiRequest(50, 2000000, 100, idUnitKpi1);
+		SalesmanTargetKpiRequestModel target2 = createSalesmanTargetKpiRequest(50, 80, 100, idUnitKpi2);
+		targetKpis.add(target1);
+		targetKpis.add(target2);
+		createTargetKpi(salesman, period, targetKpis);
+	}
+	
+	private static void createTargetKpi(Salesman salesman, YearMonth period, List<SalesmanTargetKpiRequestModel> targetKpis) {
+		List<String> roles = Arrays.asList(RoleCode.ROLE_TARGET_SALESMAN_KPI_CUD, RoleCode.ROLE_SALESMAN_VIEW);
+		String token = TokenUtils.createJWT( usernameNotApprover, roles,  60000);
+		RequestModelHelper<SalesmanKpiRequestModel> requestModelHelper = new RequestModelHelper<SalesmanKpiRequestModel>(new SalesmanKpiRequestModel(), token);
+		SalesmanKpiRequestModel requestModel = requestModelHelper.getRequestModelWithToken();
+		requestModel.id = salesman.getId();
+		requestModel.period = period;
+		requestModel.targetKpiSalesman = targetKpis;
+		Usecase<?,?> usecase = new CreateDraftTargetKpiSalesmanUsecase(requestModel);
+		usecase.run();
+	}
+	private static SalesmanTargetKpiRequestModel createSalesmanTargetKpiRequest(int bobot, int target, int targetPoint, String idUnitKpi) {
+		SalesmanTargetKpiRequestModel targetSalesman = new SalesmanTargetKpiRequestModel();
+		targetSalesman.bobot = bobot;
+		targetSalesman.target = target;
+		targetSalesman.targetPoint = targetPoint;
+		targetSalesman.unitKpiId = idUnitKpi;
+		return targetSalesman;
+	}
+	
+	private static void createApprover() {
+		List<User> users = new ArrayList<>();
+		users.add(userGateway.findByUsername(usernameApprover));
+		persistApprover(ApproverModule.TARGET_KPI, generateApprovers(users), generateNotificators());
+	}
+	private static Set<Notificator> generateNotificators(){
+		Set<Notificator> notificators = new HashSet<>();
+		EmailNotificator emailNotificator = new EmailNotificator();
+		notificators.add(emailNotificator);
+		return notificators;
+	}
+	
+	private static Set<User> generateApprovers(List<User> users){
+		Set<User> approvers = new HashSet<>();
+		users.forEach(user -> approvers.add(user));
+		return approvers;
+	}
+	
+	private static void persistApprover(ApproverModule approverModule, Set<User> users, Set<Notificator> notificators) {
+		Approver approver = new Approver(approverModule,users,notificators, ApproverableType.SIMPLE);
+		approverGateway.save(approver);
+	}
+	
+	private static void createSalesmanFromApi() {
+		List<String> myRoles = Arrays.asList(RoleCode.ROLE_SALESMAN_VIEW);
+		SalesmanRequestModel requestModel = new SalesmanRequestModel();
+		requestModel.token = TokenUtils.createJWT( usernameNotApprover, myRoles,  60000);
+		FindManyStrategy<Salesman, SalesmanRequestModel> findManyStrategy = new FindSubordinateSalesman(requestModel);
+		FindManyUsecase<?,?,?> usecase = new FindManyUsecase<>(requestModel, new FindManyResponseModel<Salesman>(), findManyStrategy, myRoles);
+		usecase.run();
+		FindManyResponseModel<Salesman> response = (FindManyResponseModel<Salesman>)usecase.getResponseModel();
+		List<Salesman> salesmans = response.page.getResult();
+		salesmanIndex0 = salesmans.get(0);
+		salesmanIndex1 = salesmans.get(1);
+		salesmanIndex2 = salesmans.get(2);
+	}
+}

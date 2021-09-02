@@ -1,0 +1,41 @@
+package com.bit.core.usecase.approving;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+
+import org.junit.jupiter.api.Test;
+
+import com.bit.core.model.request.ApprovingRequestModel;
+import com.bit.core.response.base.ResponseModel;
+import com.bit.core.usecase.BaseUsecaseTest;
+import com.bit.core.validator.string.EmptyValidator;
+
+public class ApprovingUsecaseTest extends BaseUsecaseTest{
+	
+	@Test
+	public void givenEmptyModule_thenValidationError() {
+		ApprovingRequestModel requestModel = new ApprovingRequestModel();
+		ResponseModel response = runUsecaseAndGetResponse(requestModel);
+		assertFalse(response.isSuccess);
+		assertEquals(EmptyValidator.VALIDATION_MESSAGE, response.validationMessages.get(ApprovingRequestModel.Label.module));
+	}
+	
+	@Test
+	public void givenEmptyType_thenValidationError() {
+		ApprovingRequestModel requestModel = new ApprovingRequestModel();
+		ResponseModel response = runUsecaseAndGetResponse(requestModel);
+		assertFalse(response.isSuccess);
+		assertEquals(EmptyValidator.VALIDATION_MESSAGE, response.validationMessages.get(ApprovingRequestModel.Label.type));
+	}
+
+	@Test
+	public void givenEmptyIdToApprove_thenValidationError() {
+		
+	}
+	
+	private ResponseModel runUsecaseAndGetResponse(ApprovingRequestModel requestModel) {
+		ApprovingUsecase usecase = new ApprovingUsecase(requestModel);
+		usecase.run();
+		return usecase.getResponseModel();
+	}
+}

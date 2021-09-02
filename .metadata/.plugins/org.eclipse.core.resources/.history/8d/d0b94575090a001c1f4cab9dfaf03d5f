@@ -1,0 +1,67 @@
+package com.bit.core.strategy.findMany;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import com.bit.core.constant.ApproverModule;
+import com.bit.core.constant.ErrorMessage;
+import com.bit.core.entity.Approver;
+import com.bit.core.entity.KpiPeriod;
+import com.bit.core.entity.Salesman;
+import com.bit.core.entity.User;
+import com.bit.core.gateway.ApproverGateway;
+import com.bit.core.gateway.TargetKpiGateway;
+import com.bit.core.gateway.factory.GatewayFactory;
+import com.bit.core.model.request.FindManyRequestModel;
+import com.bit.core.response.base.Page;
+import com.bit.core.strategy.FindManyStrategy;
+import com.bit.core.strategy.findOne.FindUserByToken;
+import com.bit.core.validator.NullValidator;
+import com.bit.core.validator.base.ValidatorChain;
+
+public class FindManyTargetKpiApproval extends FindManyStrategy<Salesman, FindManyRequestModel>{
+
+	public FindManyTargetKpiApproval(FindManyRequestModel requestModel) {
+		this.param = requestModel;
+	}
+	
+	@Override
+	public Page<KpiPeriod> find() {
+		checkIsApprover();
+		TargetKpiGateway gateway = (TargetKpiGateway) GatewayFactory.TARGET_KPI_GATEWAY.get();
+		return gateway.getTargetKpi(param);
+	}
+	
+	private void checkIsApprover() {
+		boolean isCanApprove = false;
+		FindUserByToken findUser = new FindUserByToken(param);
+		User user = findUser.findOne();
+		if(user == null) throw new RuntimeException(ErrorMessage.UNAUTHORIZED);
+		ApproverGateway approverGateway = (ApproverGateway)GatewayFactory.APPROVEABLE_GATEWAY.get();
+		Approver approver =  approverGateway.findByModule(ApproverModule.TARGET_KPI);
+		if(approver != null) {
+			for(User userApprover : approver.getApprovers()) {
+				if(userApprover.getId().equals(user.getId())) {
+					isCanApprove = true;
+					break;
+				}
+			}
+				
+		}
+		if(!isCanApprove) {
+			throw new RuntimeException(ErrorMessage.UNAUTHORIZED);
+		}		
+
+	}
+	
+
+	@Override
+	public List<ValidatorChain<?>> getValidatorChains() {
+		List<ValidatorChain<?>> validatorChains = new ArrayList<>();
+		validatorChains.add(new NullValidator("period", this.param.filterEqual));
+		if(this.param.filterEqual != null) {
+			validatorChains.add(new NullValidator("period", this.param.filterEqual.get("period")));
+		}
+		return validatorChains;
+	}
+}

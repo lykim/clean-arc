@@ -1,0 +1,137 @@
+package com.bit.core.usecase;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.collection.IsIterableContainingInOrder.contains;
+
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+
+import com.bit.core.config.GatewayConfig;
+import com.bit.core.constant.Direction;
+import com.bit.core.entity.User;
+import com.bit.core.gateway.UserGateway;
+import com.bit.core.gateway.factory.GatewayFactory;
+import com.bit.core.mocks.gateway.MockUserGateway;
+import com.bit.core.model.request.FindManyRequestModel;
+import com.bit.core.model.request.FindManyUserRequestModel;
+import com.bit.core.model.request.UserRequestModel;
+import com.bit.core.response.CreateResponseModel;
+import com.bit.core.response.FindManyResponseModel;
+import com.bit.core.strategy.FindManyStrategy;
+import com.bit.core.strategy.findMany.FindUsers;
+import com.bit.core.usecase.base.Usecase;
+import com.bit.core.usecase.creator.CreateUserUsecase;
+
+public class FindManyUsecaseTest {
+	private static UserGateway gateway;
+	private static String usernameAbc = "abc";
+	private static String usernameCba = "cba";
+	private static int numOfRows = 20;
+	@BeforeAll
+	public static void beforeAll() {
+		setConfig();
+		gateway = (UserGateway)GatewayFactory.USER_GATEWAY.get();
+		String username = usernameAbc;
+		String emailDomain = "@mail.com";
+		String password = "random";
+		for(int i=0; i < numOfRows; i++) {
+			if(i >=10) {
+				username = usernameCba;
+			}
+			String name = username + "_" +i;
+			createUser(name, name + emailDomain, password);			
+		}
+	}
+	
+	@AfterAll
+	public static void afterAll() {
+		resetConfig();
+		gateway.clean();
+	}
+	
+	@Test
+	public void givenSortAscending_thenSortedAscending() {
+		FindManyUserRequestModel requestModel = new FindManyUserRequestModel();
+		requestModel.direction = Direction.ASCENDING;
+		FindManyStrategy<User, FindManyUserRequestModel> findManyStrategy = new FindUsers(requestModel);
+		FindManyUsecase<?,?,?> usecase = new FindManyUsecase(requestModel, new FindManyResponseModel<User>(), findManyStrategy);
+		usecase.run();
+		FindManyResponseModel<User> response = (FindManyResponseModel<User>)usecase.getResponseModel();
+		assertTrue(response.isSuccess);
+		for(int i=0; i < response.results.size(); i++) {
+			User user = response.results.get(i);
+			if(i <10) {
+				assertEquals(user.getUsername(), usernameAbc+"_"+i);				
+			}else {
+				assertEquals(user.getUsername(), usernameCba+"_"+i);
+			}
+		}
+	}
+	
+	@Test
+	public void givenSortDescending_thenSortedDescending() {
+		FindManyUserRequestModel requestModel = new FindManyUserRequestModel();
+		requestModel.direction = Direction.DESCENDING;
+		FindManyStrategy<User, FindManyUserRequestModel> findManyStrategy = new FindUsers(requestModel);
+		FindManyUsecase<?,?,?> usecase = new FindManyUsecase(requestModel, new FindManyResponseModel<User>(), findManyStrategy);
+		usecase.run();
+		FindManyResponseModel<User> response = (FindManyResponseModel<User>)usecase.getResponseModel();
+		assertTrue(response.isSuccess);
+		for(int i=0; i >response.results.size(); i++) {
+			User user = response.results.get(i);
+			if(i < 10) {
+				assertEquals(user.getUsername(), usernameCba+"_"+i);				
+			}else {
+				assertEquals(user.getUsername(), usernameAbc+"_"+i);
+			}
+		}
+	}
+	
+	@Test
+	public void givenPageSize_thenResultSizeSameAsPageSize() {
+		FindManyUserRequestModel requestModel = new FindManyUserRequestModel();
+		requestModel.pageSize = 5;
+		FindManyStrategy<User, FindManyUserRequestModel> findManyStrategy = new FindUsers(requestModel);
+		FindManyUsecase<?,?,?> usecase = new FindManyUsecase(requestModel, new FindManyResponseModel<User>(), findManyStrategy);
+		usecase.run();
+		FindManyResponseModel<User> response = (FindManyResponseModel<User>)usecase.getResponseModel();
+		assertTrue(response.isSuccess);
+		assertEquals(requestModel.pageSize, response.results.size());
+	}
+	
+	@Test
+	public void givenPageSize_thenNumberOfPagesIsCountedCorrectly() {
+		FindManyUserRequestModel requestModel = new FindManyUserRequestModel();
+		requestModel.pageSize = 5;
+		FindManyStrategy<User, FindManyUserRequestModel> findManyStrategy = new FindUsers(requestModel);
+		FindManyUsecase<?,?,?> usecase = new FindManyUsecase(requestModel, new FindManyResponseModel<User>(), findManyStrategy);
+		usecase.run();
+		FindManyResponseModel<User> response = (FindManyResponseModel<User>)usecase.getResponseModel();
+		assertTrue(response.isSuccess);
+		int numPage = (int)Math.ceil(numOfRows / requestModel.pageSize);
+		assertEquals(numPage, response.numOfPages);
+	}
+	
+	
+	private static String createUser(String username, String email, String password) {
+		UserRequestModel request = new UserRequestModel();
+		request.username = username;
+		request.email = email;
+		request.password = password;
+		Usecase<?, CreateResponseModel> usecase = new CreateUserUsecase(request);
+		usecase.run();
+		CreateResponseModel response = usecase.getResponseModel();
+		return response.id;
+	}
+	
+	private static void setConfig() {
+		GatewayConfig.userGateway = MockUserGateway.getInstance();
+	}
+	
+	private static void resetConfig() {
+		GatewayFactory.USER_GATEWAY.destroy();
+	}
+}

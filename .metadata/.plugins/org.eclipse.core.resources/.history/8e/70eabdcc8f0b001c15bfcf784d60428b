@@ -1,0 +1,74 @@
+package com.bit.core.usecase.approving;
+
+import com.bit.core.constant.ApproverModule;
+import com.bit.core.constant.ErrorMessage;
+import com.bit.core.entity.Approver;
+import com.bit.core.entity.User;
+import com.bit.core.gateway.ApproverGateway;
+import com.bit.core.gateway.factory.GatewayFactory;
+import com.bit.core.model.request.ApprovingRequestModel;
+import com.bit.core.response.base.ResponseModel;
+import com.bit.core.strategy.findOne.FindUserByToken;
+import com.bit.core.usecase.base.template.CommonTemplateUsecase;
+import com.bit.core.utils.StringUtils;
+import com.bit.core.validator.string.EmptyValidator;
+
+public class ApprovingUsecase extends CommonTemplateUsecase<ApprovingRequestModel, ResponseModel>{
+	Approver approver;
+	User userInAction;
+	public ApprovingUsecase(ApprovingRequestModel requestModel) {
+		this.requestModel = requestModel;
+		this.responseModel = new ResponseModel();
+	}
+	@Override
+	protected void setupValidation() {
+		validator.setNextValidator(new EmptyValidator(ApprovingRequestModel.Label.module, requestModel.module));
+//		validator.setNextValidator(new EmptyValidator(ApprovingRequestModel.Label.type, requestModel.type));
+		validator.setNextValidator(new EmptyValidator(ApprovingRequestModel.Label.idToApprove, requestModel.idToApprove));
+	}
+
+	@Override
+	protected void doBussinessProcess() {
+		checkIsTokenEmpty();
+		setApprovingUser();
+		setApprover();
+
+					boolean isUserInActionCanApprove = false;
+					for(User userApprover : this.approver.getApprovers()) {
+						if(userInAction.getUsername().equals( userApprover.getUsername() )) {
+							isUserInActionCanApprove = true;
+							break;
+						}
+					}
+					if(isUserInActionCanApprove) {
+						
+					}else {
+						throw new RuntimeException(ErrorMessage.UNAUTHORIZED);
+					}
+
+
+	}
+	
+	private void setApprover() {
+		ApproverGateway approverGateway = (ApproverGateway)GatewayFactory.APPROVEABLE_GATEWAY.get();
+		this.approver =  approverGateway.findByModule(ApproverModule.get(requestModel.module));
+		if(this.approver == null)	throw new RuntimeException(ErrorMessage.APPROVER_MODULE_NOT_FOUND);
+	}
+	
+	private void setApprovingUser() {
+		FindUserByToken findUserByToken = new FindUserByToken(requestModel);
+		userInAction = findUserByToken.findOne();
+		if(userInAction == null) throw new RuntimeException(ErrorMessage.UNAUTHORIZED);
+	}
+	
+	private void checkIsTokenEmpty() {
+		if(!StringUtils.isNotEmpty(requestModel.token)) throw new RuntimeException(ErrorMessage.UNAUTHORIZED);
+	}
+
+	@Override
+	protected void parseRequestModelToEntity() {
+		// TODO Auto-generated method stub
+		
+	}
+
+}

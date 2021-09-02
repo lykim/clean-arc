@@ -1,0 +1,79 @@
+package com.bit.persistent.gateway;
+
+import java.util.Set;
+
+import com.bit.core.constant.ApproverModule;
+import com.bit.core.entity.Approver;
+import com.bit.core.entity.User;
+import com.bit.core.entity.base.Notificator;
+import com.bit.core.gateway.ApproverGateway;
+import com.bit.core.model.request.FindManyRequestModel;
+import com.bit.core.response.base.Page;
+
+public class ApproverGatewayImpl implements ApproverGateway{
+
+	private static ApproverGateway INSTANCE;
+	private ApproverGatewayImpl() {};
+	
+	public static ApproverGateway getInstance() {
+		if(INSTANCE == null) {
+			INSTANCE = new ApproverGatewayImpl();
+		}
+		return INSTANCE;
+	}
+	
+	@Override
+	public Approver findById(String id) {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public void save(Approver entity) {
+		// TODO Auto-generated method stub
+		
+	}
+
+	@Override
+	public void update(Approver entity, String id) {
+		// TODO Auto-generated method stub
+		
+	}
+
+	@Override
+	public Page<Approver> find(FindManyRequestModel param) {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public void clean() {
+		// TODO Auto-generated method stub
+		
+	}
+
+	@Override
+	public void setActive(String id, boolean active) {
+		// TODO Auto-generated method stub
+		
+	}
+
+	@Override
+	public Approver findByModule(ApproverModule module) {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public void updateApprovers(Set<User> approvers, String id) {
+		// TODO Auto-generated method stub
+		
+	}
+
+	@Override
+	public void updateNotificators(Set<Notificator> notificators, String id) {
+		// TODO Auto-generated method stub
+		
+	}
+
+}

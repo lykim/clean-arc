@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?><testrun name="ApprovingUsecaseTest" project="core" tests="4" started="4" failures="0" errors="0" ignored="0">
+  <testsuite name="com.bit.core.usecase.approving.ApprovingUsecaseTest" time="0.0" displayname="ApprovingUsecaseTest" uniqueid="[engine:junit-jupiter]/[class:com.bit.core.usecase.approving.ApprovingUsecaseTest]">
+    <testcase name="givenNotApproverToken_thenError" classname="com.bit.core.usecase.approving.ApprovingUsecaseTest" time="0.0" displayname="givenNotApproverToken_thenError()" uniqueid="[engine:junit-jupiter]/[class:com.bit.core.usecase.approving.ApprovingUsecaseTest]/[method:givenNotApproverToken_thenError()]"/>
+    <testcase name="givenEmptyModule_thenValidationError" classname="com.bit.core.usecase.approving.ApprovingUsecaseTest" time="0.0" displayname="givenEmptyModule_thenValidationError()" uniqueid="[engine:junit-jupiter]/[class:com.bit.core.usecase.approving.ApprovingUsecaseTest]/[method:givenEmptyModule_thenValidationError()]"/>
+    <testcase name="givenEmptyIdToApprove_thenValidationError" classname="com.bit.core.usecase.approving.ApprovingUsecaseTest" time="0.0" displayname="givenEmptyIdToApprove_thenValidationError()" uniqueid="[engine:junit-jupiter]/[class:com.bit.core.usecase.approving.ApprovingUsecaseTest]/[method:givenEmptyIdToApprove_thenValidationError()]"/>
+    <testcase name="givenEmptyApproverToken_thenError" classname="com.bit.core.usecase.approving.ApprovingUsecaseTest" time="0.0" displayname="givenEmptyApproverToken_thenError()" uniqueid="[engine:junit-jupiter]/[class:com.bit.core.usecase.approving.ApprovingUsecaseTest]/[method:givenEmptyApproverToken_thenError()]"/>
+  </testsuite>
+</testrun>

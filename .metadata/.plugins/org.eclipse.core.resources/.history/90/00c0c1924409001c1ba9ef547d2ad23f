@@ -1,0 +1,21 @@
+package com.bit.core.strategy.findMany;
+
+import com.bit.core.entity.KpiPeriod;
+import com.bit.core.model.request.FindManyRequestModel;
+import com.bit.core.response.base.Page;
+import com.bit.core.strategy.FindManyStrategy;
+import com.bit.core.validator.NullValidator;
+
+public class FindManyTargetKpiApproval extends FindManyStrategy<KpiPeriod, FindManyRequestModel>{
+
+	public FindManyTargetKpiApproval(FindManyRequestModel requestModel) {
+		this.param = requestModel;
+	}
+	
+	@Override
+	public Page<KpiPeriod> find() {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+}

@@ -1,0 +1,70 @@
+package com.bit.core.usecase.kpi;
+
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.util.Arrays;
+import java.util.List;
+
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+
+import com.bit.core.constant.RoleCode;
+import com.bit.core.entity.Salesman;
+import com.bit.core.model.request.SalesmanRequestModel;
+import com.bit.core.model.request.UserRequestModel;
+import com.bit.core.response.CreateResponseModel;
+import com.bit.core.response.FindManyResponseModel;
+import com.bit.core.strategy.FindManyStrategy;
+import com.bit.core.strategy.findMany.FindSubordinateSalesman;
+import com.bit.core.usecase.BaseUsecaseTest;
+import com.bit.core.usecase.FindManyUsecase;
+import com.bit.core.usecase.base.Usecase;
+import com.bit.core.usecase.user.CreateUserUsecase;
+import com.bit.core.utils.TokenUtils;
+
+public class FindManySalesmanSubordinateTest extends BaseUsecaseTest{
+	private static String token;
+	private static List<String> viewRoles;
+	private static String username = "Zuser1";
+
+	
+	@BeforeAll
+	public static void beforeAll() {
+		viewRoles = Arrays.asList(RoleCode.ROLE_SALESMAN_VIEW);
+		token = TokenUtils.createJWT( username, viewRoles,  60000);
+		createUser(username, "mail@mail.com", "password123");
+	}
+	
+	@Test
+	public void givenNewSalesmanCode_thenGetSubordinate() {
+		SalesmanRequestModel requestModel = new SalesmanRequestModel();
+		requestModel.token = token;
+		FindManyStrategy<Salesman, SalesmanRequestModel> findManyStrategy = new FindSubordinateSalesman(requestModel);
+		FindManyUsecase<?,?,?> usecase = new FindManyUsecase<>(requestModel, new FindManyResponseModel<Salesman>(), findManyStrategy, viewRoles);
+		usecase.run();
+		FindManyResponseModel<Salesman> response = (FindManyResponseModel<Salesman>)usecase.getResponseModel();
+		assertTrue(response.isSuccess);
+		assertTrue( response.page.getResult().size() > 0 );
+		for(Salesman salesman : response.page.getResult()) {
+			assertNotNull(salesman.getCode());
+			assertNotNull(salesman.getName());
+		}
+	}
+	
+	private static String createUser(String username, String email, String password) {
+		List<String> roles = Arrays.asList(RoleCode.ROLE_USER_CUD);
+		String tokenForCreateUser = TokenUtils.createJWT( "any", roles,  60000);
+		UserRequestModel request = new UserRequestModel();
+		request.token = tokenForCreateUser;
+		request.username = username;
+		request.email = email;
+		request.password = password;
+		request.salesmanCode = "RUK-ATN";
+		Usecase<?, CreateResponseModel> usecase = new CreateUserUsecase(request);
+		usecase.run();
+		CreateResponseModel response = usecase.getResponseModel();
+		return response.id;
+	}
+	
+}

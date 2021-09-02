@@ -1,0 +1,39 @@
+package com.bit.core.usecase.approving;
+
+import com.bit.core.constant.ErrorMessage;
+import com.bit.core.model.request.ApprovingRequestModel;
+import com.bit.core.response.base.ResponseModel;
+import com.bit.core.usecase.base.template.CommonTemplateUsecase;
+import com.bit.core.utils.StringUtils;
+import com.bit.core.validator.string.EmptyValidator;
+
+public class ApprovingUsecase extends CommonTemplateUsecase<ApprovingRequestModel, ResponseModel>{
+
+	public ApprovingUsecase(ApprovingRequestModel requestModel) {
+		this.requestModel = requestModel;
+		this.responseModel = new ResponseModel();
+	}
+	@Override
+	protected void setupValidation() {
+		validator.setNextValidator(new EmptyValidator(ApprovingRequestModel.Label.module, requestModel.module));
+//		validator.setNextValidator(new EmptyValidator(ApprovingRequestModel.Label.type, requestModel.type));
+		validator.setNextValidator(new EmptyValidator(ApprovingRequestModel.Label.idToApprove, requestModel.idToApprove));
+	}
+
+	@Override
+	protected void doBussinessProcess() {
+		if(StringUtils.isNotEmpty(requestModel.token)) {
+			
+		}else {
+			throw new RuntimeException(ErrorMessage.UNAUTHORIZED);
+		}
+		
+	}
+
+	@Override
+	protected void parseRequestModelToEntity() {
+		// TODO Auto-generated method stub
+		
+	}
+
+}

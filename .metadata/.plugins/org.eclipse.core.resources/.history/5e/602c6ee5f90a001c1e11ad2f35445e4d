@@ -1,0 +1,30 @@
+package com.bit.core.usecase.approving;
+
+import com.bit.core.model.request.ApprovingRequestModel;
+import com.bit.core.response.base.ResponseModel;
+import com.bit.core.usecase.base.template.CommonTemplateUsecase;
+
+public class ApprovingUsecase extends CommonTemplateUsecase<ApprovingRequestModel, ResponseModel>{
+
+	public ApprovingUsecase(ApprovingRequestModel requestModel) {
+		this.requestModel = requestModel;
+	}
+	@Override
+	protected void setupValidation() {
+		// TODO Auto-generated method stub
+		
+	}
+
+	@Override
+	protected void doBussinessProcess() {
+		// TODO Auto-generated method stub
+		
+	}
+
+	@Override
+	protected void parseRequestModelToEntity() {
+		// TODO Auto-generated method stub
+		
+	}
+
+}

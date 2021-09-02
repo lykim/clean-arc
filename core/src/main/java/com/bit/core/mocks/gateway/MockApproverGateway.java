@@ -1,0 +1,147 @@
+package com.bit.core.mocks.gateway;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+import com.bit.core.constant.ApproverModule;
+import com.bit.core.constant.Direction;
+import com.bit.core.entity.Approver;
+import com.bit.core.entity.Role;
+import com.bit.core.entity.User;
+import com.bit.core.entity.base.Notificator;
+import com.bit.core.gateway.ApproverGateway;
+import com.bit.core.gateway.UserGateway;
+import com.bit.core.gateway.factory.GatewayFactory;
+import com.bit.core.model.request.FindManyRequestModel;
+import com.bit.core.model.request.FindManyRoleRequestModel;
+import com.bit.core.response.WebPage;
+import com.bit.core.response.base.Page;
+import com.bit.core.utils.CollectionUtils;
+import com.bit.core.utils.SerializationUtils;
+import com.bit.core.utils.StringUtils;
+
+public class MockApproverGateway implements ApproverGateway{
+	
+	private Set<Approver> approvers = MockStorage.approvers;
+	private static ApproverGateway INSTANCE;
+	
+	private MockApproverGateway() {}
+	
+	public static ApproverGateway getInstance() {
+		if(INSTANCE == null) {
+			INSTANCE = new MockApproverGateway();
+		}
+		return INSTANCE;
+	}
+	
+	@Override
+	public Approver findById(String id) {
+		Optional<Approver> optApprover = approvers.stream().filter(app -> id.equals(app.getId())).findFirst();
+		return optApprover.isPresent() ? optApprover.get() : null;
+	}
+
+	@Override
+	public void save(Approver entity) {
+		this.approvers.add(entity);
+	}
+
+	@Override
+	public void update(Approver entity, String id) {
+		Optional<Approver> optApprover = approvers.stream().filter(app -> id.equals(app.getId())).findFirst();
+		if(optApprover.isPresent()) {
+			Approver approver = optApprover.get();
+			if(entity.getApproverabelType() != null) approver.setApproverabelType(entity.getApproverabelType());
+			if(!CollectionUtils.isEmpty(entity.getApprovers())) approver.setApprovers(entity.getApprovers());
+		}
+	}
+
+	@Override
+	public Page<Approver> find(FindManyRequestModel param) {
+		List<Approver> listApproval = new ArrayList<>();
+		if(param.direction == Direction.DESCENDING) {
+			if(StringUtils.isNotEmpty(param.orderBy)) {
+				if(param.orderBy.equals("type")) {
+					listApproval = approvers.stream().sorted(Comparator.comparing(Approver::getApproverabelType).reversed() ).collect(Collectors.toList());								
+				}
+			}else {
+				listApproval = approvers.stream().sorted(Comparator.comparing(Approver::getModule).reversed() ).collect(Collectors.toList());							
+			}
+		}else {
+			if(StringUtils.isNotEmpty(param.orderBy)) {
+				if(param.orderBy.equals("type")) {
+					listApproval = approvers.stream().sorted(Comparator.comparing(Approver::getApproverabelType)).collect(Collectors.toList());			
+				}
+			}else {
+				listApproval = approvers.stream().sorted(Comparator.comparing(Approver::getModule)).collect(Collectors.toList());							
+			}
+
+		}
+		FindManyRequestModel roleParam = param;
+//		if(StringUtils.isNotEmpty(roleParam.codeLike)) {
+//			listRoles = listRoles.stream().filter(data -> data.getCode().contains(roleParam.codeLike)).collect(Collectors.toList());
+//		}
+		int approversSize = listApproval.size();
+		List<Approver> results = listApproval.stream().collect(Collectors.toList());
+		Collections.copy(results, listApproval);
+		if(param.pageSize > 0) {
+			int indexStart = ((param.pageNumber * param.pageSize) - param.pageSize) + 1;
+			indexStart = indexStart - 1;
+			int indexEnd = indexStart + param.pageSize;
+			indexEnd = results.size() < indexEnd ? results.size() : indexEnd;
+			results = listApproval.subList(indexStart, indexEnd);
+		}
+		Page<Approver> page = new WebPage<>(results, approversSize, param.pageSize);
+		return page;
+	}
+
+	@Override
+	public void clean() {
+		this.approvers.clear();
+		
+	}
+
+	@Override
+	public void setActive(String id, boolean active) {
+		// TODO Auto-generated method stub
+		
+	}
+
+	@Override
+	public Approver findByModule(ApproverModule module) {
+		Optional<Approver> opt = approvers.stream().filter(approver -> approver.getModule().equals(module)).findAny();
+		Approver result = opt.isPresent() ? opt.get() : null;
+		if(opt.isPresent()) {
+			Set<User> users = new HashSet<>();
+			UserGateway userGateway = (UserGateway)GatewayFactory.USER_GATEWAY.get();
+			for(User user : result.getApprovers()) {
+				User dbuser = userGateway.findById(user.getId());
+				users.add(dbuser);
+			}
+			result.setApprovers(users);
+		}
+				
+		return result;
+	}
+
+	@Override
+	public void updateApprovers(Set<User> userApprovers, String id) {
+		Optional<Approver> opt = approvers.stream().filter(approver -> approver.getId().equals(id)).findAny();
+		Approver approver = opt.get();
+		approver.setApprovers(userApprovers);
+	}
+
+	@Override
+	public void updateNotificators(Set<Notificator> notificators, String id) {
+		Optional<Approver> opt = approvers.stream().filter(approver -> approver.getId().equals(id)).findAny();
+		Approver approver = opt.get();
+		approver.setNotificators(notificators);
+
+	}
+
+}

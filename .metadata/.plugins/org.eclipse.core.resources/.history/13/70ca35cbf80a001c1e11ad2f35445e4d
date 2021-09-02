@@ -1,0 +1,15 @@
+package com.bit.core.usecase.approving;
+
+import org.junit.jupiter.api.Test;
+
+import com.bit.core.model.request.ApprovingRequestModel;
+import com.bit.core.usecase.BaseUsecaseTest;
+
+public class ApprovingUsecaseTest extends BaseUsecaseTest{
+	
+	@Test
+	public void givenNoModule_thenValidationError() {
+		ApprovingRequestModel requestModel = new ApprovingRequestModel();
+	}
+	
+}

@@ -1,0 +1,117 @@
+package com.bit.persistent.gateway;
+
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.Timestamp;
+import java.util.Set;
+
+import com.bit.core.constant.ApproverModule;
+import com.bit.core.entity.Approver;
+import com.bit.core.entity.KeyPerformanceIndicator;
+import com.bit.core.entity.User;
+import com.bit.core.entity.base.Notificator;
+import com.bit.core.gateway.ApproverGateway;
+import com.bit.core.model.request.FindManyRequestModel;
+import com.bit.core.response.base.Page;
+import com.bit.persistent.DataSource;
+
+public class ApproverGatewayImpl implements ApproverGateway{
+
+	private static ApproverGateway INSTANCE;
+	private ApproverGatewayImpl() {};
+	
+	public static ApproverGateway getInstance() {
+		if(INSTANCE == null) {
+			INSTANCE = new ApproverGatewayImpl();
+		}
+		return INSTANCE;
+	}
+	
+	@Override
+	public Approver findById(String id) {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public void save(Approver entity) {
+		try(Connection connection = DataSource.getConnection()) {
+			connection.setAutoCommit(false);
+			PreparedStatement stmt = connection.prepareStatement("INSERT INTO \"role\" (id, module, active, "
+					+ "created_by, created_at, updated_by, updated_at) VALUES ( ?, ?, ?, ?, ?, ?, ?)");
+			stmt.setString(1, entity.getId());
+			stmt.setString(2,  entity.getModule().getAbbreviation());
+			stmt.setBoolean(3,  entity.isActive());
+			stmt.setString(4,  entity.getCreatedBy());
+			stmt.setTimestamp(5,  Timestamp.from(entity.getCreatedTime()) );
+			stmt.setString(6,  entity.getUpdatedBy());
+			stmt.setTimestamp(7,  Timestamp.from(entity.getUpdatedTime()) );
+			stmt.execute();
+			
+			PreparedStatement stmtInsertApprover = connection.prepareStatement("INSERT INTO approval_approver (approval_id, user_id) VALUES(?,?)");
+			for(User user : entity.getApprovers()) {
+				stmtInsertApprover.setString(1, entity.getId());
+				stmtInsertApprover.setString(2, user.getId());
+				stmtInsertApprover.addBatch();
+			};
+			stmtInsertApprover.executeBatch();
+			
+			PreparedStatement stmtInsertNotificator = connection.prepareStatement("INSERT INTO approval_notificator (approval_id, notifcator) VALUES(?,?)");
+			for(Notificator notificator : entity.getNotificators()) {
+				stmtInsertNotificator.setString(1, entity.getId());
+				stmtInsertNotificator.setString(2, notificator.getType());
+				stmtInsertApprover.addBatch();
+			};
+			stmtInsertApprover.executeBatch();
+			
+			connection.commit();
+		}catch (Exception e) {
+			e.printStackTrace();
+			throw new RuntimeException("Database error", e);
+		}
+		
+	}
+
+	@Override
+	public void update(Approver entity, String id) {
+		// TODO Auto-generated method stub
+		
+	}
+
+	@Override
+	public Page<Approver> find(FindManyRequestModel param) {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public void clean() {
+		// TODO Auto-generated method stub
+		
+	}
+
+	@Override
+	public void setActive(String id, boolean active) {
+		// TODO Auto-generated method stub
+		
+	}
+
+	@Override
+	public Approver findByModule(ApproverModule module) {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public void updateApprovers(Set<User> approvers, String id) {
+		// TODO Auto-generated method stub
+		
+	}
+
+	@Override
+	public void updateNotificators(Set<Notificator> notificators, String id) {
+		// TODO Auto-generated method stub
+		
+	}
+
+}

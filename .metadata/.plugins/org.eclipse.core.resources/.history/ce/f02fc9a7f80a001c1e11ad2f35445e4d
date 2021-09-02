@@ -1,0 +1,7 @@
+package com.bit.core.model.request;
+
+import com.bit.core.model.request.base.RequestModel;
+
+public class ApprovingRequestModel  extends RequestModel{
+
+}

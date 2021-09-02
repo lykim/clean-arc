@@ -1,0 +1,52 @@
+package com.bit.core.usecase;
+
+import java.util.List;
+
+import com.bit.core.entity.base.Entity;
+import com.bit.core.gateway.UserGateway;
+import com.bit.core.gateway.factory.GatewayFactory;
+import com.bit.core.model.request.FindManyRequestModel;
+import com.bit.core.response.FindManyResponseModel;
+import com.bit.core.response.base.Page;
+import com.bit.core.security.Authorizeable;
+import com.bit.core.strategy.FindManyStrategy;
+import com.bit.core.usecase.base.template.CommonTemplateUsecase;
+import com.bit.core.utils.CollectionUtils;
+import com.bit.core.validator.base.ValidatorChain;
+
+public class FindManyUsecase<E extends Entity,I extends FindManyRequestModel, O extends FindManyResponseModel<E>> extends CommonTemplateUsecase<I, O> {
+
+	UserGateway gateway;
+	FindManyStrategy<?, ?> findManyStrategy;
+	public FindManyUsecase(I requestModel, O responseModel, FindManyStrategy<E , I> findManyStrategy, List<String> roles) {
+		gateway = (UserGateway)GatewayFactory.USER_GATEWAY.get();
+		this.requestModel = requestModel;
+		this.findManyStrategy = findManyStrategy;
+		this.responseModel = responseModel;
+		authorize = new Authorizeable(roles);
+	}
+	
+	@Override
+	protected void setupValidation() {
+		if(findManyStrategy != null) {
+			if(!CollectionUtils.isEmpty(findManyStrategy.getValidatorChains())) {
+				for(ValidatorChain<?> validator : findManyStrategy.getValidatorChains()) {
+					validator.setNextValidator(validator);
+				}
+			}
+		}
+		
+	}
+
+	@Override
+	protected void doBussinessProcess() {
+		responseModel.page = (Page<E>)findManyStrategy.find();
+	}
+
+	@Override
+	protected void parseRequestModelToEntity() {
+		// TODO Auto-generated method stub
+		
+	}
+
+}

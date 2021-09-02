@@ -1,0 +1,25 @@
+package com.bit.core.usecase.approving;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+
+import org.junit.jupiter.api.Test;
+
+import com.bit.core.model.request.ApprovingRequestModel;
+import com.bit.core.response.base.ResponseModel;
+import com.bit.core.usecase.BaseUsecaseTest;
+import com.bit.core.validator.string.EmptyValidator;
+
+public class ApprovingUsecaseTest extends BaseUsecaseTest{
+	
+	@Test
+	public void givenNoModule_thenValidationError() {
+		ApprovingRequestModel requestModel = new ApprovingRequestModel();
+		ApprovingUsecase usecase = new ApprovingUsecase(requestModel);
+		usecase.run();
+		ResponseModel response = usecase.getResponseModel();
+		assertFalse(response.isSuccess);
+		assertEquals(EmptyValidator.VALIDATION_MESSAGE, response.validationMessages.get(ApprovingRequestModel.Label.module));
+	}
+	
+}

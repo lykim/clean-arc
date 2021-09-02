@@ -1,0 +1,115 @@
+package com.bit.core.usecase.approving;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+
+import java.util.List;
+
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.MethodOrderer.OrderAnnotation;
+import org.junit.jupiter.api.Order;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
+
+import com.bit.core.constant.ApproverModule;
+import com.bit.core.constant.ApproverableType;
+import com.bit.core.constant.ErrorMessage;
+import com.bit.core.model.request.ApprovingRequestModel;
+import com.bit.core.response.base.ResponseModel;
+import com.bit.core.usecase.BaseUsecaseTest;
+import com.bit.core.utility.ApproverUsecaseHelper;
+import com.bit.core.utility.UserUsecaseUtils;
+import com.bit.core.utils.TokenUtils;
+import com.bit.core.validator.string.EmptyValidator;
+
+@TestMethodOrder(OrderAnnotation.class)
+public class ApprovingUsecaseTest extends BaseUsecaseTest{
+	private static List<String> approverIds;
+	private static String approverPrefix = "approver";
+	private static int numOfApprovers = 2;
+	private static ApproverUsecaseHelper approvalHelper;
+	private static String tokenApprover1 = "";
+	private static String notTokenApprover = "";
+	private static String notApproverName = "notApprover";
+	
+	@BeforeAll
+	public static void beforeAll() {
+		approvalHelper = new ApproverUsecaseHelper();
+		createApprovers();
+		createRegularUser();
+	}
+	
+	private static void createApprovers() {
+		approverIds = UserUsecaseUtils.createUsers(approverPrefix, "@mail.com", "p@ssw0rd", numOfApprovers);		
+		String approverId = approvalHelper.createApprover(ApproverableType.SIMPLE, ApproverModule.TARGET_KPI, approverIds);
+		tokenApprover1 = TokenUtils.createJWT( approverPrefix + "_0", null,  60000);
+	}
+	
+	private static void createRegularUser() {
+		UserUsecaseUtils.createUser(notApproverName, "valid@mail.com", "password123");
+		notTokenApprover = TokenUtils.createJWT( notApproverName, null,  60000);
+	}
+	
+	@Test
+	public void givenEmptyModule_thenValidationError() {
+		ApprovingRequestModel requestModel = new ApprovingRequestModel();
+		ResponseModel response = runUsecaseAndGetResponse(requestModel);
+		assertFalse(response.isSuccess);
+		assertEquals(EmptyValidator.VALIDATION_MESSAGE, response.validationMessages.get(ApprovingRequestModel.Label.module));
+	}
+	
+//	@Test
+//	public void givenEmptyType_thenValidationError() {
+//		ApprovingRequestModel requestModel = new ApprovingRequestModel();
+//		ResponseModel response = runUsecaseAndGetResponse(requestModel);
+//		assertFalse(response.isSuccess);
+//		assertEquals(EmptyValidator.VALIDATION_MESSAGE, response.validationMessages.get(ApprovingRequestModel.Label.type));
+//	}
+
+	@Test
+	public void givenEmptyIdToApprove_thenValidationError() {
+		ApprovingRequestModel requestModel = new ApprovingRequestModel();
+		ResponseModel response = runUsecaseAndGetResponse(requestModel);
+		assertFalse(response.isSuccess);
+		assertEquals(EmptyValidator.VALIDATION_MESSAGE, response.validationMessages.get(ApprovingRequestModel.Label.idToApprove));
+	}
+	
+	@Test
+	public void givenEmptyApproverToken_thenError() {
+		ApprovingRequestModel requestModel = new ApprovingRequestModel();
+		requestModel.module = ApproverModule.TARGET_KPI.getAbbreviation();
+		requestModel.idToApprove = "any";
+		ResponseModel response = runUsecaseAndGetResponse(requestModel);
+		assertFalse(response.isSuccess);
+		assertEquals(ErrorMessage.UNAUTHORIZED, response.errorMessage);
+	}
+	
+	@Test
+	public void givenNotApproverToken_thenError() {
+		ApprovingRequestModel requestModel = new ApprovingRequestModel();
+		requestModel.token = notTokenApprover;
+		requestModel.module = ApproverModule.TARGET_KPI.getAbbreviation();
+		requestModel.idToApprove = "any";
+		ResponseModel response = runUsecaseAndGetResponse(requestModel);
+		assertFalse(response.isSuccess);
+		assertEquals(ErrorMessage.UNAUTHORIZED, response.errorMessage);
+	}
+	
+	@Test
+	@Order(1)
+	public void givenApprover1_thenPartiallyApproved() {
+		ApprovingRequestModel requestModel = new ApprovingRequestModel();
+		requestModel.token = tokenApprover1;
+		requestModel.module = ApproverModule.TARGET_KPI.getAbbreviation();
+		requestModel.idToApprove = "any";
+		ResponseModel response = runUsecaseAndGetResponse(requestModel);
+		assertFalse(response.isSuccess);
+	}
+	
+	
+	private ResponseModel runUsecaseAndGetResponse(ApprovingRequestModel requestModel) {
+		ApprovingUsecase usecase = new ApprovingUsecase(requestModel);
+		usecase.run();
+		return usecase.getResponseModel();
+	}
+}

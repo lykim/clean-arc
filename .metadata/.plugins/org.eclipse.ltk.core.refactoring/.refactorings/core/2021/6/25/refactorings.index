@@ -1,0 +1,12 @@
+1623556269065	Rename type 'DefaultUsecaseTest'
+1623640585985	Rename type 'UserGatewayFactory'
+1623642412570	Delete element
+1623642835171	Encapsulate field 'email'
+1623643006441	Encapsulate field 'password'
+1623658351387	Rename type 'AuditeableUsecaseTest'
+1623660678942	Rename type 'AuthenticatedRequestModel'
+1623768309845	Rename type 'ActiveInactiveUserUsecase'
+1623840655757	Rename type 'OnOffable'
+1623840935452	Delete element
+1624071209931	Rename type 'UserGatewayFactory'
+1624088586363	Delete element

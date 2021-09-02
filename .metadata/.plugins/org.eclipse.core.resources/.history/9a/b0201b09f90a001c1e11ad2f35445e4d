@@ -1,0 +1,9 @@
+package com.bit.core.usecase.approving;
+
+import com.bit.core.model.request.ApprovingRequestModel;
+import com.bit.core.response.base.ResponseModel;
+import com.bit.core.usecase.base.template.CommonTemplateUsecase;
+
+public class ApprovingUsecase extends CommonTemplateUsecase<ApprovingRequestModel, ResponseModel>{
+
+}

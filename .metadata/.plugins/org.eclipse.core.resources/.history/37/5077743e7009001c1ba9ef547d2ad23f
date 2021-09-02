@@ -1,0 +1,202 @@
+package com.bit.core.mocks.gateway;
+
+import java.time.YearMonth;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+import com.bit.core.constant.Direction;
+import com.bit.core.constant.TargetKpiStatus;
+import com.bit.core.entity.KeyPerformanceIndicator;
+import com.bit.core.entity.KpiPeriod;
+import com.bit.core.entity.Salesman;
+import com.bit.core.entity.UnitKpi;
+import com.bit.core.gateway.KpiGateway;
+import com.bit.core.gateway.TargetKpiGateway;
+import com.bit.core.gateway.UnitKpiGateway;
+import com.bit.core.gateway.factory.GatewayFactory;
+import com.bit.core.model.request.SalesmanRequestModel;
+import com.bit.core.response.WebPage;
+import com.bit.core.response.base.Page;
+import com.bit.core.utils.CollectionUtils;
+import com.bit.core.utils.SerializationUtils;
+import com.bit.core.utils.StringUtils;
+
+public class MockKpiGateway implements KpiGateway, TargetKpiGateway {
+	private Set<Salesman> salesmans = MockStorage.salesmans;
+	private static KpiGateway INSTANCE;
+	
+	private MockKpiGateway() {}
+	
+	public static KpiGateway getInstance() {
+		if(INSTANCE == null) {
+			INSTANCE = new MockKpiGateway();
+		}
+		return INSTANCE;
+	}
+	
+	@Override
+	public void clean() {
+		salesmans.clear();
+	}
+
+	@Override
+	public Set<Salesman> getSalesmanByCodes(Set<String> codes) {
+		return salesmans.stream().filter(salesman -> codes.contains(salesman.getCode())).collect(Collectors.toSet());
+	}
+
+	@Override
+	public void createSalesman(Salesman salesman) {
+		salesmans.add(salesman);
+	}
+
+	@Override
+	public void updateSalesman(Salesman salesman) {
+		Optional<Salesman> optional  = salesmans.stream().filter(persistedSalesman -> persistedSalesman.getCode().equals(salesman.getCode())).findAny();
+		if(optional.isPresent()) {
+			Salesman persistSalesman = optional.get();
+			persistSalesman.setArea(salesman.getArea());
+			persistSalesman.setBranchCode(salesman.getBranchCode());
+			persistSalesman.setBranchName(salesman.getBranchName());
+			persistSalesman.setDescription(salesman.getDescription());
+			persistSalesman.setDivision(salesman.getDivision());
+			persistSalesman.setEmail(salesman.getEmail());
+			persistSalesman.setLevelName(salesman.getLevelName());
+			persistSalesman.setName(salesman.getName());
+			persistSalesman.setSupervisorCode(salesman.getSupervisorCode());
+			persistSalesman.setLevel(salesman.getLevel());
+		}
+	}
+
+	@Override
+	public Page<Salesman> getSubordinateSalesmansBySalesmanCode(SalesmanRequestModel param) {
+		List<Salesman> subordinateSalesmans = salesmans.stream().filter(salesman -> param.salesmanCode.equals(salesman.getSupervisorCode())).sorted(Comparator.comparing(Salesman::getName)).collect(Collectors.toList());
+		List<Salesman> listSalesman = new ArrayList<>();
+		if(param.direction == Direction.DESCENDING) {
+			if(StringUtils.isNotEmpty(param.orderBy)) {
+				if(param.orderBy.equals("code")) {
+					listSalesman = subordinateSalesmans.stream().sorted(Comparator.comparing(Salesman::getName).reversed() ).collect(Collectors.toList());								
+				}
+			}else {
+				listSalesman = subordinateSalesmans.stream().sorted(Comparator.comparing(Salesman::getName).reversed() ).collect(Collectors.toList());							
+			}
+		}else {
+			if(StringUtils.isNotEmpty(param.orderBy)) {
+				if(param.orderBy.equals("name")) {
+					listSalesman = subordinateSalesmans.stream().sorted(Comparator.comparing(Salesman::getName)).collect(Collectors.toList());			
+				}
+			}else {
+				listSalesman = subordinateSalesmans.stream().sorted(Comparator.comparing(Salesman::getName)).collect(Collectors.toList());							
+			}
+		}
+
+		List<Salesman> tmpSalesmans = fillUnitKpiDetailInSalesman(listSalesman);
+		listSalesman = tmpSalesmans;
+		
+		
+		SalesmanRequestModel roleParam = (SalesmanRequestModel)param;
+		if(StringUtils.isNotEmpty(roleParam.nameLike)) {
+			listSalesman = listSalesman.stream().filter(data -> data.getCode().contains(roleParam.nameLike)).collect(Collectors.toList());
+		}
+		int rolesSize = listSalesman.size();
+		List<Salesman> results = listSalesman.stream().collect(Collectors.toList());
+		Collections.copy(results, listSalesman);
+		if(param.pageSize > 0) {
+			int indexStart = ((param.pageNumber * param.pageSize) - param.pageSize) + 1;
+			indexStart = indexStart - 1;
+			int indexEnd = indexStart + param.pageSize;
+			indexEnd = results.size() < indexEnd ? results.size() : indexEnd;
+			results = listSalesman.subList(indexStart, indexEnd);
+		}
+		Page<Salesman> page = new WebPage<>(results, rolesSize, param.pageSize);
+		return page;
+	}
+	
+	private List<Salesman> fillUnitKpiDetailInSalesman(List<Salesman> listSalesman){
+		UnitKpiGateway unitKpiGateway = (UnitKpiGateway)GatewayFactory.UNIT_KPI_GATEWAY.get();
+		List<Salesman> result = new ArrayList<Salesman>();
+		for(Salesman salesman: listSalesman) {
+			if(!CollectionUtils.isEmpty(salesman.getKpiPeriods())) {
+				for(KpiPeriod kpiPeriod : salesman.getKpiPeriods()) {
+					if(!CollectionUtils.isEmpty(kpiPeriod.getTargetKpis())) {
+						for(KeyPerformanceIndicator kpi: kpiPeriod.getTargetKpis()) {
+							if(kpi.getUnitKpi() != null) {
+								UnitKpi unitKpiPersist =  unitKpiGateway.findById(kpi.getUnitKpi().getId());
+								kpi.setUnitKpi(unitKpiPersist);
+							}
+						}
+					}					
+				}
+			}
+
+			result.add(salesman);
+		}
+		return result;
+	}
+
+	@Override
+	public Salesman getSalesmanByCode(String code) {
+		Optional<Salesman> optional = salesmans.stream().filter(salesman -> code.equals(salesman.getCode())).findAny();
+		return optional.isEmpty() ? null : optional.get();
+	}
+
+	@Override
+	public void updateSalesmanTargetKpi(Salesman inputSalesman) {
+		Optional<Salesman> optional = salesmans.stream().filter(salesman -> inputSalesman.getId().equals(salesman.getId())).findAny();
+		Salesman salesman = optional.get();
+		KpiPeriod inputPeriod = inputSalesman.getKpiPeriods().get(0);
+		List<KpiPeriod> newPeriods = new ArrayList<>();
+		boolean isThereSamePeriod = false;
+		for(KpiPeriod period : salesman.getKpiPeriods()) {
+			 if(period.getPeriod().equals(inputPeriod.getPeriod())) {
+				 period = inputPeriod;
+				 isThereSamePeriod = true;
+			 }
+			 newPeriods.add(period);
+		}
+		if(CollectionUtils.isEmpty(newPeriods) || !isThereSamePeriod) {
+			newPeriods.add(inputPeriod);
+		}
+		salesman.setKpiPeriods(newPeriods);
+	}
+
+	@Override
+	public void updateTargetKpiStatus(Salesman salesman) {
+		Optional<Salesman> optional = salesmans.stream().filter(salesmanData -> salesman.getId().equals(salesmanData.getId())).findAny();
+		Salesman persistSalesman = optional.get();
+		KpiPeriod inputPeriod = salesman.getKpiPeriods().get(0);
+		for(KpiPeriod kpiPeriod :  persistSalesman.getKpiPeriods()) {
+			if(kpiPeriod.getPeriod().equals(inputPeriod.getPeriod())) {
+				kpiPeriod.setKpiStatus(inputPeriod.getKpiStatus());
+			}
+		}
+	}
+
+	@Override
+	public void submitTargets(Set<String> ids, YearMonth period) {
+		for(String id : ids) {
+			Optional<Salesman> optSalesman =  salesmans.stream().filter(salesman -> id.equals(salesman.getId())).findFirst();
+			if(optSalesman.isPresent()) {
+				Salesman salesman = optSalesman.get();
+				if(!CollectionUtils.isEmpty(salesman.getKpiPeriods())) {
+					for(KpiPeriod kpiPeriod : salesman.getKpiPeriods()) {
+						if(kpiPeriod.getPeriod().equals(period)) {
+							kpiPeriod.setKpiStatus(TargetKpiStatus.SUBMITTED);
+						}
+					}
+				}
+			}
+		}
+	}
+
+	@Override
+	public Salesman getSalesmanById(String code) {
+		Optional<Salesman> optional = salesmans.stream().filter(salesman -> code.equals(salesman.getId())).findAny();
+		return optional.isEmpty() ? null : (Salesman)SerializationUtils.cloneObjectByGson(optional.get());
+	}
+	
+}

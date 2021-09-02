@@ -1,0 +1,15 @@
+package com.bit.core.presenter;
+
+import com.bit.core.entity.Salesman;
+import com.bit.core.model.request.FindManyRequestModel;
+import com.bit.core.response.FindManyResponseModel;
+
+public class KpiPeriodPresenterImpl implements KpiPeriodPresenter{
+
+	@Override
+	public FindManyResponseModel<Salesman> findForApprover(FindManyRequestModel requestModel) {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+}

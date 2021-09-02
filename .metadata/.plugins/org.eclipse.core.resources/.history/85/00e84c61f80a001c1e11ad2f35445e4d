@@ -1,0 +1,7 @@
+package com.bit.core.usecase.approving;
+
+import com.bit.core.usecase.BaseUsecaseTest;
+
+public class ApprovingUsecaseTest extends BaseUsecaseTest{
+
+}

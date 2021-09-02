@@ -1,0 +1,5 @@
+package com.bit.core.usecase.approving;
+
+public class ApprovingUsecaseTest {
+
+}
